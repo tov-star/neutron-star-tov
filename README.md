@@ -1,4 +1,4 @@
-# Neutron Star TOV Solver (SURP 2026)
+# Neutron Star TOV Solver (SURP 2026) via Claude
 
 A from-scratch Tolman-Oppenheimer-Volkoff solver for neutron-star structure,
 built to survey many equations of state (EoS). The design principle: every EoS
