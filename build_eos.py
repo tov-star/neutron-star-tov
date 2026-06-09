@@ -19,10 +19,6 @@ For a neutron star we want a single 1-D curve P(rho):
 
 Output: eos_cold_beta.dat  with columns  nb[fm^-3]  rho[g/cm^3]  P[dyn/cm^2].
 
-NOTE (physics to confirm with mentor): which temperature index counts as
-"cold", and the crust treatment, are modelling choices. The dedicated cold
-beta-equilibrium table from CompOSE's "thermodynamic conditions" tool is an
-independent way to get the same curve.
 """
 
 import numpy as np

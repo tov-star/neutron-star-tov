@@ -35,10 +35,12 @@ def load_eos():
 
 def sweep(eos, relativistic, rho_c_values, rho_stop):
     M, R = [], []
+    print(f"{'rho_c [g/cm^3]':>16}{'M [Msun]':>12}{'R [km]':>10}")
     for rc in rho_c_values:
         m, r = solve_star(rc, eos, h=2.0e3, rho_stop=rho_stop,
                           relativistic=relativistic)
         M.append(m / M_SUN); R.append(r / 1e5)
+        print(f"{rc:>16.4e}{m / M_SUN:>12.4f}{r / 1e5:>10.3f}")
     return np.array(R), np.array(M)
 
 
@@ -52,8 +54,10 @@ def main():
     R_gr, M_gr = sweep(eos, True, rho_c_values, rho_stop)
 
     imax = np.nanargmax(M_gr)
-    print(f"Maximum (TOV) mass = {M_gr[imax]:.3f} Msun "
-          f"at R = {R_gr[imax]:.2f} km, rho_c = {rho_c_values[imax]:.3e}")
+    print("\n=== MAX mass point ===")
+    print(f"rho_c = {rho_c_values[imax]:.4e} g/cm^3")
+    print(f"M     = {M_gr[imax]:.4f} Msun")
+    print(f"R     = {R_gr[imax]:.3f} km")
 
     name = "APR" if eos.mode == "compose" else "polytrope"
     plt.figure(figsize=(7.5, 6))
