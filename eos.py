@@ -91,6 +91,12 @@ class EOS:
         self._finalize(d[:, 1], d[:, 2])
         return self
 
+    @classmethod
+    def from_name(cls, name, tables_dir="eos_tables"):
+        """Load eos_tables/<name>.dat (the standard prepared table)."""
+        import os
+        return cls.from_table(os.path.join(tables_dir, f"{name}.dat"))
+
     # ------------------------------------------------------------------
     # MODE 2 -- analytic polytrope for testing (no data needed)
     # ------------------------------------------------------------------

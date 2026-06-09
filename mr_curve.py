@@ -1,17 +1,18 @@
 """
-mr_curve.py  --  sweep central density to trace the mass-radius relation.
+mr_curve.py  --  mass-radius relation for one EoS.
 
-Run:
-    python mr_curve.py
+Usage:
+    python mr_curve.py <NAME>          # e.g. ABHT_QMCRMF1 or APR
 
-Cross-checks (project Part 2):
-  * The curve should overlap the published APR M-R relation when using the
-    real CompOSE EOS.
-  * The peak of the curve is the maximum (TOV) mass -- compare it against the
-    observed "most massive neutron star" to decide if the EOS is allowed.
+Reads   eos_tables/<NAME>.dat
+Writes  results/<NAME>/mr_curve.png  and  results/<NAME>/mr_points.dat
+Also checks the maximum mass against the catalog reference and the heaviest
+observed pulsar (the project's EoS-validity test).
 """
 
 import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+import sys
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -19,59 +20,55 @@ import matplotlib.pyplot as plt
 
 from eos import EOS
 from solver import solve_star, M_SUN
+import catalog
+
+DEFAULT = "ABHT_QMCRMF1"
 
 
-def load_eos():
-    if os.path.exists("eos_cold_beta.dat"):
-        print("Using reduced cold beta-equilibrium APR table.")
-        return EOS.from_table()
-    if os.path.exists("eos.nb") and os.path.exists("eos.thermo"):
-        print("Reducing 3D CompOSE table -> cold beta-eq (run build_eos.py).")
-        import build_eos; build_eos.build()
-        return EOS.from_table()
-    print("CompOSE files not found -- using toy polytrope EOS.")
-    return EOS.polytrope()
+def main(name=DEFAULT):
+    eos = EOS.from_name(name)
+    outdir = os.path.join("results", name)
+    os.makedirs(outdir, exist_ok=True)
 
-
-def sweep(eos, relativistic, rho_c_values, rho_stop):
+    rho_c = np.logspace(np.log10(3.4e14), np.log10(eos.rho[-1] * 0.99), 60)
     M, R = [], []
     print(f"{'rho_c [g/cm^3]':>16}{'M [Msun]':>12}{'R [km]':>10}")
-    for rc in rho_c_values:
-        m, r = solve_star(rc, eos, h=2.0e3, rho_stop=rho_stop,
-                          relativistic=relativistic)
+    for rc in rho_c:
+        m, r = solve_star(rc, eos, h=2.0e3)
         M.append(m / M_SUN); R.append(r / 1e5)
         print(f"{rc:>16.4e}{m / M_SUN:>12.4f}{r / 1e5:>10.3f}")
-    return np.array(R), np.array(M)
+    M, R = np.array(M), np.array(R)
 
-
-def main():
-    eos = load_eos()
-    rho_stop = 1.0e9 if eos.mode == "polytrope" else None
-
-    lo = 3.4e14 if eos.mode != "polytrope" else 2.0e14
-    rho_c_values = np.logspace(np.log10(lo), np.log10(eos.rho[-1] * 0.99), 60)
-
-    R_gr, M_gr = sweep(eos, True, rho_c_values, rho_stop)
-
-    imax = np.nanargmax(M_gr)
+    imax = np.nanargmax(M)
     print("\n=== MAX mass point ===")
-    print(f"rho_c = {rho_c_values[imax]:.4e} g/cm^3")
-    print(f"M     = {M_gr[imax]:.4f} Msun")
-    print(f"R     = {R_gr[imax]:.3f} km")
+    print(f"rho_c = {rho_c[imax]:.4e} g/cm^3")
+    print(f"M     = {M[imax]:.4f} Msun")
+    print(f"R     = {R[imax]:.3f} km")
 
-    name = "APR" if eos.mode == "compose" else "polytrope"
+    try:
+        meta = catalog.get(name)
+        print(f"reference Mmax (CompOSE) = {meta['ref_Mmax']} Msun")
+        passes = M[imax] >= catalog.OBS_MAX_MASS
+        print(f"clears heaviest pulsar ({catalog.OBS_MAX_MASS} Msun)? "
+              f"{'YES' if passes else 'NO'}")
+    except KeyError:
+        pass
+
+    np.savetxt(os.path.join(outdir, "mr_points.dat"),
+               np.column_stack([rho_c, M, R]),
+               header="rho_c[g/cm^3]  M[Msun]  R[km]")
+
     plt.figure(figsize=(7.5, 6))
-    plt.plot(R_gr, M_gr, "-o", ms=3, label=f"{name} EOS")
-    plt.scatter([R_gr[imax]], [M_gr[imax]], color="crimson", zorder=5,
-                label=f"max mass = {M_gr[imax]:.2f} M$_\\odot$")
+    plt.plot(R, M, "-o", ms=3, label=name)
+    plt.scatter([R[imax]], [M[imax]], color="crimson", zorder=5,
+                label=f"max mass = {M[imax]:.2f} M$_\\odot$")
     plt.xlabel("radius [km]"); plt.ylabel("mass [M$_\\odot$]")
-    plt.title(f"Mass-radius relation ({name} EOS)")
-    plt.xlim(9, 16); plt.ylim(0, max(2.5, M_gr[imax] * 1.1))
-    plt.legend(); plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig("mr_curve.png", dpi=130)
-    print("saved mr_curve.png")
+    plt.title(f"Mass-radius relation: {name}")
+    plt.xlim(9, 16); plt.ylim(0, max(2.5, M[imax] * 1.1))
+    plt.legend(); plt.grid(True, alpha=0.3); plt.tight_layout()
+    plt.savefig(os.path.join(outdir, "mr_curve.png"), dpi=130)
+    print(f"saved {outdir}/mr_curve.png and mr_points.dat")
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else DEFAULT)

@@ -9,6 +9,8 @@ venv/
 .idea/
 
 # EOS data (downloaded from CompOSE; do not commit large data tables)
+eos_raw/
+results/
 eos.nb
 eos.thermo
 eos.t
