@@ -44,15 +44,7 @@ python convergence.py      # order-of-convergence check
    most-massive neutron star for the EOS to be allowed.
 4. Halving the step size should shrink the error (see `convergence.py` for the
    subtlety about which parts of the scheme are 4th vs 2nd order).
-
-## Comparing against my teammate's code
-
-My teammate wrote an independent solver (`apr_eos.py`, `tov.py`, `rk4.py`,
-`single_star.py`, `mr_curve.py`). Their code lives in `reference/` (kept
-separate, not mixed into my own modules) so the two implementations can be run
-on the same EOS and the resulting `(M, R)` curves overlaid. Agreement between
-two independently written codes is a strong correctness check.
-
+   
 ## Roadmap
 
 - [x] TOV solver + single star

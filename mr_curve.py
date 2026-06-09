@@ -9,8 +9,6 @@ Cross-checks (project Part 2):
     real CompOSE EOS.
   * The peak of the curve is the maximum (TOV) mass -- compare it against the
     observed "most massive neutron star" to decide if the EOS is allowed.
-For comparison we also overplot the Newtonian result, which has NO maximum
-mass (it just keeps rising) -- a vivid illustration of why GR matters.
 """
 
 import os
@@ -52,20 +50,19 @@ def main():
     rho_c_values = np.logspace(np.log10(lo), np.log10(eos.rho[-1] * 0.99), 60)
 
     R_gr, M_gr = sweep(eos, True, rho_c_values, rho_stop)
-    R_nt, M_nt = sweep(eos, False, rho_c_values, rho_stop)
 
     imax = np.nanargmax(M_gr)
     print(f"Maximum (TOV) mass = {M_gr[imax]:.3f} Msun "
           f"at R = {R_gr[imax]:.2f} km, rho_c = {rho_c_values[imax]:.3e}")
 
+    name = "APR" if eos.mode == "compose" else "polytrope"
     plt.figure(figsize=(7.5, 6))
-    plt.plot(R_gr, M_gr, "-o", ms=3, label="TOV (general relativity)")
-    plt.plot(R_nt, M_nt, "--", color="gray", label="Newtonian (no max mass)")
+    plt.plot(R_gr, M_gr, "-o", ms=3, label=f"{name} EOS")
     plt.scatter([R_gr[imax]], [M_gr[imax]], color="crimson", zorder=5,
                 label=f"max mass = {M_gr[imax]:.2f} M$_\\odot$")
     plt.xlabel("radius [km]"); plt.ylabel("mass [M$_\\odot$]")
-    plt.title(f"Mass-radius relation ({eos.mode} EOS)")
-    plt.xlim(8, 18); plt.ylim(0, max(2.5, M_gr[imax] * 1.1))
+    plt.title(f"Mass-radius relation ({name} EOS)")
+    plt.xlim(9, 16); plt.ylim(0, max(2.5, M_gr[imax] * 1.1))
     plt.legend(); plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig("mr_curve.png", dpi=130)
