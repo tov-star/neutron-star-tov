@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# PyCharm / JetBrains IDE settings
+.idea/
+
+# EOS data (downloaded from CompOSE; do not commit large data tables)
+eos.nb
+eos.thermo
+eos.t
+*.thermo
+*.nb
+
+# generated figures
+*.png
