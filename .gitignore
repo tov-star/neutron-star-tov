@@ -8,14 +8,17 @@ venv/
 # PyCharm / JetBrains IDE settings
 .idea/
 
-# EOS data (downloaded from CompOSE; do not commit large data tables)
-eos_raw/
-results/
-eos.nb
-eos.thermo
-eos.t
-*.thermo
-*.nb
+# Large raw CompOSE downloads -- too big for git (e.g. a 3-D eos.thermo is
+# hundreds of MB). Download these from CompOSE to rebuild tables; see README.
+# The small eos.mr reference files ARE committed (compare_to_compose.py uses them).
+eos_raw/**/eos.thermo
+eos_raw/**/eos.nb
+eos_raw/**/eos.t
+eos_raw/**/eos.yq
+eos_raw/**/eos.init
+eos_raw/**/*.pdf
+eos_raw/**/*.zip
 
-# generated figures
+# Regenerable outputs
+results/
 *.png
