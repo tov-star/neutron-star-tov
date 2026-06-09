@@ -1,0 +1,3 @@
+name,compose_id,model,dim,ref_Mmax,ref_R14
+APR,68,variational A18+dv+UIX*,1D,2.19,11.37
+ABHT_QMCRMF1,297,RMF chiral-EFT (QMC-RMF1),3D,1.95,11.81
