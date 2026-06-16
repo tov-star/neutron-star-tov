@@ -22,6 +22,27 @@ from tov import tov_rhs, newtonian_rhs, G, c
 M_SUN = 1.98847e33     # g
 
 
+def baryonic_mass(eos, rs, Ps, ms):
+    """
+    Baryonic (rest) mass of the fluid, from a solved profile (rs, Ps, ms).
+
+        M_b = integral  4 pi r^2 * (m_n n_b) / sqrt(1 - 2 G m / r c^2)  dr
+
+    Two differences from the gravitational mass:
+      * it uses the baryon REST-mass density m_n n_b (eos.rest_mass_density),
+        not the mass-energy density rho;
+      * it integrates over PROPER volume -- the 1/sqrt(1 - 2Gm/rc^2) factor is
+        the general-relativistic stretching of radial distance.
+    The gap M_b - M_grav is the gravitational binding energy / c^2.
+    Only the fluid is counted (a black hole carries no baryonic mass).
+    """
+    rho_rest = eos.rest_mass_density(Ps)                  # g/cm^3 (vectorised)
+    metric = np.sqrt(1.0 - 2.0 * G * ms / (rs * c**2))
+    integrand = 4.0 * np.pi * rs**2 * rho_rest / metric
+    # trapezoidal integration (portable across numpy versions)
+    return float(np.sum(0.5 * (integrand[1:] + integrand[:-1]) * np.diff(rs)))
+
+
 def solve_star(rho_c, eos, M_BH=0.0, h=2.0e3, rho_stop=None,
                relativistic=True, r0=1.0, max_steps=500000,
                return_profile=False):

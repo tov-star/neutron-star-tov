@@ -56,5 +56,5 @@ def main(name=DEFAULT, mbh_list=(0, 0.1, 0.2, 0.3)):
 
 if __name__ == "__main__":
     nm = sys.argv[1] if len(sys.argv) > 1 else DEFAULT
-    mbhs = [float(x) for x in sys.argv[2:]] if len(sys.argv) > 2 else (0.0, 0.1, 0.2, 0.3, 1)
+    mbhs = [float(x) for x in sys.argv[2:]] if len(sys.argv) > 2 else (0.0, 0.1, 0.2, 0.3, 0.35, 0.4)
     main(nm, mbhs)

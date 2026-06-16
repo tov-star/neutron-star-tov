@@ -1,50 +1,39 @@
 """
-pulsar_population.py  --  Part 2: the neutron-star (pulsar) rotation population.
+pulsar_population.py  --  Part 2: neutron-star (pulsar) rotation population.
 
-Goal: from the ATNF pulsar catalogue, show the period histogram (it is strongly
-bimodal) and extract the mean rotation period -- and, crucially, the mean period
-of the MILLISECOND population, which is the one relevant to the Kusenko spin-up
-mechanism (only MSPs sit close enough to mass shedding to be spun up to ejection).
+Produces the spin-period histogram and TWO characterisations of the rotation
+period that feed the model's initial spin P0 (Leung: "average or binned"):
 
-------------------------------------------------------------------------------
-HOW TO GET THE DATA  (do this once, on your machine, with a network connection)
-  Web interface:  https://www.atnf.csiro.au/research/pulsar/psrcat/
-    - In "Output Parameters" tick  P0  (barycentric period, seconds).
-    - Optionally tick  NAME  and  BINARY.
-    - Set output format to a plain table or CSV and save it, e.g.  psrcat_P0.csv
-  Command line (if you installed psrcat):
-    psrcat -c "NAME P0" -o short  >  psrcat_P0.txt
+  1. AVERAGE   - mean, median, and the rotation-relevant harmonic mean
+                 (= 1/<1/P>, which weights the fast rotators the spin-up
+                 mechanism actually cares about; for a period distribution
+                 skewed to long P, harmonic mean < arithmetic mean).
+  2. BINNED    - the period distribution split into log-spaced bins, each with a
+                 representative period (the in-bin median) and a population
+                 weight. Saved to results/period_bins.csv so the survey can be
+                 run per bin and the outcomes weighted by the real population.
 
-Then:
-    python pulsar_population.py psrcat_P0.csv
-    python pulsar_population.py psrcat_P0.txt        # whitespace table also works
+Because the ejection ratio scales as 1/P0, the binned table lets you turn the
+single survey grid into a population-weighted ejection prediction without
+re-running anything.
 
-The parser is permissive: it reads every numeric token that looks like a period
-in seconds (1e-3 s ... 100 s) from the file, whatever the exact column layout.
-If you know the column name (CSV header), pass it:  --col P0
-------------------------------------------------------------------------------
-
-For reference (ATNF, ~2025): ~3000+ pulsars, ~560 MSPs. Normal pulsars peak near
-P ~ 0.5 s (log-normal); MSPs (P < 30 ms) peak near P ~ 3-5 ms; fastest ~1.4 ms.
-Fuller-Kusenko-Takhistov use a fiducial P0 ~ 1 ms for the ejection estimate.
+GET THE DATA (once, on a networked machine)
+  https://www.atnf.csiro.au/research/pulsar/psrcat/  -> tick P0 -> save CSV.
+  Then:  python pulsar_population.py psrcat_P0.csv  [--pop msp|all] [--nbins 12]
 """
 
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-import sys
-import re
+import sys, re, argparse
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-MSP_CUTOFF = 30e-3     # s  (P < 30 ms == "millisecond pulsar"; excludes the Crab)
+MSP_CUTOFF = 30e-3     # s
 
 
 def load_periods(path, col=None):
-    """Return a 1-D array of spin periods [s]. Tries pandas (CSV with header),
-    then falls back to grabbing every float in the plausible period range."""
-    # 1) try a real CSV with a named/обvious period column
     try:
         import pandas as pd
         df = pd.read_csv(path, sep=None, engine="python", comment="#")
@@ -55,14 +44,11 @@ def load_periods(path, col=None):
                     if re.search(r"\bp0\b|period", str(c), re.I)]
             p = pd.to_numeric(df[cand[0]], errors="coerce").to_numpy() if cand else None
         if p is not None:
-            p = p[np.isfinite(p)]
-            p = p[(p > 1e-3) & (p < 100)]
+            p = p[np.isfinite(p)]; p = p[(p > 1e-3) & (p < 100)]
             if p.size:
                 return p
     except Exception:
         pass
-
-    # 2) permissive fallback: every float in [1e-3, 100] s on each line
     periods = []
     with open(path) as f:
         for line in f:
@@ -73,68 +59,104 @@ def load_periods(path, col=None):
                     v = float(tok)
                 except ValueError:
                     continue
-                if 1e-3 < v < 100:        # plausible pulsar period in seconds
-                    periods.append(v)
-                    break                 # one period per line (the P0 column)
+                if 1e-3 < v < 100:
+                    periods.append(v); break
     return np.array(periods, dtype=float)
 
 
 def summarize(p):
     msp = p[p < MSP_CUTOFF]
-    normal = p[p >= MSP_CUTOFF]
-    print(f"total pulsars read           : {p.size}")
+    print(f"total pulsars                : {p.size}")
     print(f"  millisecond (P<30 ms)      : {msp.size}")
-    print(f"  normal      (P>=30 ms)     : {normal.size}")
     print(f"mean   period (all)          : {np.mean(p)*1e3:.2f} ms")
     print(f"median period (all)          : {np.median(p)*1e3:.2f} ms")
     if msp.size:
-        print(f"mean   period (MSPs)         : {np.mean(msp)*1e3:.3f} ms   <-- use this as P0")
+        hmean = 1.0 / np.mean(1.0 / msp)        # rotation-relevant average
+        print(f"mean   period (MSPs)         : {np.mean(msp)*1e3:.3f} ms")
         print(f"median period (MSPs)         : {np.median(msp)*1e3:.3f} ms")
+        print(f"harmonic mean (MSPs)         : {hmean*1e3:.3f} ms   <- P0 from <1/P>")
         print(f"fastest pulsar               : {np.min(p)*1e3:.3f} ms")
-        omega = 2*np.pi/np.mean(msp)
-        print(f"Omega0 (mean MSP)            : {omega:.3e} rad/s")
-    return msp, normal
+    return msp
 
 
-def plot_hist(p, outpath="results/pulsar_period_hist.png"):
+def binned_periods(p, n_bins=12, pop="msp"):
+    """Log-spaced period bins. Returns list of dicts with the in-bin median
+    period (representative P0) and the population weight."""
+    sel = p[p < MSP_CUTOFF] if pop == "msp" else p
+    if sel.size == 0:
+        return []
+    edges = np.logspace(np.log10(sel.min()), np.log10(sel.max() * 1.001), n_bins + 1)
+    rows = []
+    for k in range(n_bins):
+        lo, hi = edges[k], edges[k + 1]
+        inb = sel[(sel >= lo) & (sel < hi)]
+        if inb.size == 0:
+            continue
+        rows.append(dict(P_lo_ms=lo*1e3, P_hi_ms=hi*1e3,
+                         P_rep_ms=float(np.median(inb)*1e3),
+                         count=int(inb.size), weight=float(inb.size/sel.size)))
+    return rows
+
+
+def save_bins(rows, path="results/period_bins.csv"):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write("P_lo_ms,P_hi_ms,P_rep_ms,count,weight\n")
+        for r in rows:
+            f.write(f"{r['P_lo_ms']:.4f},{r['P_hi_ms']:.4f},"
+                    f"{r['P_rep_ms']:.4f},{r['count']},{r['weight']:.5f}\n")
+    print(f"saved {path}")
+
+
+def print_bins(rows, pop):
+    print(f"\nBinned rotation period ({pop} population):")
+    print(f"  {'P range [ms]':>18}{'P_rep [ms]':>12}{'count':>8}{'weight':>9}")
+    for r in rows:
+        print(f"  {r['P_lo_ms']:7.3f}-{r['P_hi_ms']:<8.3f}"
+              f"{r['P_rep_ms']:12.3f}{r['count']:8d}{r['weight']:9.3f}")
+
+
+def plot_population(p, rows, pop, outpath="results/pulsar_period_hist.png"):
     os.makedirs(os.path.dirname(outpath), exist_ok=True)
-    logp = np.log10(p)               # log10(P / s)
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.hist(logp, bins=60, color="steelblue", edgecolor="white", alpha=0.85)
-    ax.axvline(np.log10(MSP_CUTOFF), color="crimson", ls="--",
-               label=f"MSP cut (30 ms)")
-    ax.axvline(np.log10(np.median(p)), color="k", ls=":",
-               label=f"median = {np.median(p)*1e3:.0f} ms")
-    ax.set_xlabel(r"$\log_{10}(P\,/\,\mathrm{s})$")
-    ax.set_ylabel("number of pulsars")
-    ax.set_title("ATNF pulsar spin-period distribution")
-    # secondary tick labels in physical units
-    ticks = np.array([1e-3, 1e-2, 1e-1, 1e0, 1e1])
-    ax.set_xticks(np.log10(ticks))
-    ax.set_xticklabels(["1 ms", "10 ms", "0.1 s", "1 s", "10 s"])
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(outpath, dpi=130)
-    plt.close(fig)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+    logp = np.log10(p)
+    ax1.hist(logp, bins=60, color="steelblue", edgecolor="white", alpha=0.85)
+    ax1.axvline(np.log10(MSP_CUTOFF), color="crimson", ls="--", label="MSP cut (30 ms)")
+    ax1.axvline(np.log10(np.median(p)), color="k", ls=":",
+                label=f"median {np.median(p)*1e3:.0f} ms")
+    ax1.set_xticks(np.log10([1e-3, 1e-2, 1e-1, 1e0, 1e1]))
+    ax1.set_xticklabels(["1 ms", "10 ms", "0.1 s", "1 s", "10 s"])
+    ax1.set_xlabel(r"$\log_{10}(P/\mathrm{s})$"); ax1.set_ylabel("count")
+    ax1.set_title("Spin-period distribution"); ax1.legend()
+    if rows:
+        reps = [r["P_rep_ms"] for r in rows]
+        wts = [r["weight"] for r in rows]
+        ax2.bar(range(len(reps)), wts, color="seagreen", alpha=0.85)
+        ax2.set_xticks(range(len(reps)))
+        ax2.set_xticklabels([f"{x:.1f}" for x in reps], rotation=45, fontsize=8)
+        ax2.set_xlabel("representative period per bin [ms]")
+        ax2.set_ylabel("population weight")
+        ax2.set_title(f"Binned rotation period ({pop})")
+    fig.tight_layout(); fig.savefig(outpath, dpi=130); plt.close(fig)
     print(f"saved {outpath}")
 
 
-def main(path, col=None):
+def main(path, pop="msp", nbins=12, col=None):
     p = load_periods(path, col=col)
     if p.size == 0:
-        print("No periods parsed. Check the file, or pass --col <name> for a CSV.")
-        return
+        print("No periods parsed. Check the file, or pass --col <name>."); return
     summarize(p)
-    plot_hist(p)
+    rows = binned_periods(p, n_bins=nbins, pop=pop)
+    print_bins(rows, pop)
+    save_bins(rows)
+    plot_population(p, rows, pop)
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    col = None
-    if "--col" in sys.argv:
-        col = sys.argv[sys.argv.index("--col") + 1]
-    if not args:
-        print(__doc__)
-        print("usage: python pulsar_population.py <psrcat_export> [--col P0]")
-    else:
-        main(args[0], col=col)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("path")
+    ap.add_argument("--pop", choices=["msp", "all"], default="msp")
+    ap.add_argument("--nbins", type=int, default=12)
+    ap.add_argument("--col", default=None)
+    a = ap.parse_args()
+    main(a.path, pop=a.pop, nbins=a.nbins, col=a.col)
