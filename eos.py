@@ -149,7 +149,7 @@ class EOS:
     @property
     def P_surface(self):
         """Lowest tabulated pressure -- a natural 'surface' threshold."""
-        return self.P[0]
+        return self.P[0]    # ~10^9-10^10 > 10^8
 
     def summary(self):
         print(f"EOS mode : {self.mode}")

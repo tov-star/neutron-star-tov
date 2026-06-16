@@ -22,7 +22,7 @@ from eos import EOS
 from solver import solve_star, M_SUN
 import catalog
 
-DEFAULT = "ABHT_QMCRMF1"
+DEFAULT = "APR"
 
 
 def main(name=DEFAULT):
@@ -34,7 +34,7 @@ def main(name=DEFAULT):
     M, R = [], []
     print(f"{'rho_c [g/cm^3]':>16}{'M [Msun]':>12}{'R [km]':>10}")
     for rc in rho_c:
-        m, r = solve_star(rc, eos, h=2.0e3)
+        m, r = solve_star(rc, eos, h=2.0e2)
         M.append(m / M_SUN); R.append(r / 1e5)
         print(f"{rc:>16.4e}{m / M_SUN:>12.4f}{r / 1e5:>10.3f}")
     M, R = np.array(M), np.array(R)

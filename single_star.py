@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from eos import EOS
 from solver import solve_star, M_SUN
 
-DEFAULT = "ABHT_QMCRMF1"
+DEFAULT = "APR"
 
 
 def main(name=DEFAULT, rho_c=1.0e15):
